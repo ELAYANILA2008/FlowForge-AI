@@ -1,0 +1,23 @@
+Given the following business instruction from a user, analyze the requirements, extract the parameters, and generate the structured business workflow following the system guidelines.
+
+USER INSTRUCTION:
+"""
+{user_instruction}
+"""
+
+Remember:
+1. Only use allowlisted actions:
+   - create_registration_page
+   - create_booking_page
+   - create_order_checkout
+   - collect_customer_details
+   - schedule_appointment_slot
+   - create_paypal_order
+   - verify_payment
+   - send_confirmation_email
+   - send_notification
+2. Never invent missing details (use null if not specified).
+3. If critical details (like price for payment or capacity for a workshop) are missing, set "clarification_needed": true and list "clarification_questions".
+4. If this is an unsupported/invalid operation, set "supported": false with an explanatory reason.
+5. Return strictly valid JSON.
+
