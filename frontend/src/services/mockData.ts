@@ -386,6 +386,8 @@ export const SAMPLE_DASHBOARD_METRICS: DashboardMetrics = {
   failedExecutions: 6,
   totalRegistrations: 489,
   totalRevenueUsd: 14820,
+  totalRevenueInr: 0,
+  totalRevenueEur: 0,
   overallTaskCompletionRate: 99.4,
   avgExecutionTimeSeconds: 1.28,
   systemReliabilityScore: 99.8,

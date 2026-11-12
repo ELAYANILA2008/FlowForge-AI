@@ -5,6 +5,8 @@ export interface DashboardMetrics {
   failedExecutions: number;
   totalRegistrations: number;
   totalRevenueUsd: number;
+  totalRevenueInr: number;
+  totalRevenueEur: number;
   overallTaskCompletionRate: number; // e.g. 99.4%
   avgExecutionTimeSeconds: number; // e.g. 1.34s
   systemReliabilityScore: number; // e.g. 99.9%

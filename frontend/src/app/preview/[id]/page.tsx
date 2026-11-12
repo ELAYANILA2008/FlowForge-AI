@@ -19,11 +19,25 @@ import {
   Check,
   RotateCcw,
   Info,
+  AlertCircle,
 } from "lucide-react";
 import { Button } from "@/components/common/Button";
 import { Badge } from "@/components/common/Badge";
 import { WorkflowService, RegistrationService } from "@/services/api";
 import { Workflow } from "@/types/workflow";
+
+function formatCurrency(amount: number, currencyCode: string = "USD"): string {
+  try {
+    return new Intl.NumberFormat("en-US", {
+      style: "currency",
+      currency: currencyCode.toUpperCase(),
+      minimumFractionDigits: 2,
+      maximumFractionDigits: 2,
+    }).format(amount);
+  } catch {
+    return `${currencyCode.toUpperCase()} ${amount.toFixed(2)}`;
+  }
+}
 
 export default function RegistrationPreviewPage() {
   const params = useParams();
@@ -40,7 +54,8 @@ export default function RegistrationPreviewPage() {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [checkoutStep, setCheckoutStep] = useState<"form" | "paypal_modal" | "success">("form");
   const [mockOrderId, setMockOrderId] = useState("");
-  const [seatsTaken, setSeatsTaken] = useState(34);
+  const [seatsTaken, setSeatsTaken] = useState(0);
+  const [paymentError, setPaymentError] = useState<string | null>(null);
 
   useEffect(() => {
     async function loadWf() {
@@ -48,7 +63,7 @@ export default function RegistrationPreviewPage() {
         const wf = await WorkflowService.getWorkflowById(workflowId);
         if (wf) {
           setWorkflow(wf);
-          setSeatsTaken(wf.stats?.totalRegistrations || 34);
+          setSeatsTaken(wf.stats?.totalRegistrations ?? 0);
         }
       } catch (e) {
         console.error("Failed to load workflow for preview", e);
@@ -61,17 +76,31 @@ export default function RegistrationPreviewPage() {
   const feeAmount = priceStep?.config.price ?? 20;
   const currency = priceStep?.config.currency ?? "USD";
   const capacityStep = workflow?.steps.find((s) => s.type === "registration");
-  const seatsTotal = capacityStep?.config.capacity ?? workflow?.stats.capacityLimit ?? 50;
+  const seatsTotal = capacityStep?.config.capacity ?? workflow?.stats?.capacityLimit ?? 50;
   const seatsRemaining = Math.max(0, seatsTotal - seatsTaken);
+  const isFull = seatsRemaining <= 0;
 
   const handleStartCheckout = (e: React.FormEvent) => {
     e.preventDefault();
+    if (isFull || seatsRemaining <= 0) {
+      setPaymentError("Registration is full. No seats remaining.");
+      return;
+    }
     if (!fullName || !email) return;
+    setPaymentError(null);
     setCheckoutStep("paypal_modal");
   };
 
   const handleSimulatePayment = async () => {
+    // Check capacity again before submitting registration
+    if (seatsRemaining <= 0 || seatsTaken >= seatsTotal) {
+      setPaymentError("Registration is full. No seats remaining to complete this reservation.");
+      return;
+    }
+
     setIsSubmitting(true);
+    setPaymentError(null);
+
     try {
       const res = await RegistrationService.submitRegistration(workflow?.id || workflowId, {
         studentName: fullName,
@@ -79,15 +108,23 @@ export default function RegistrationPreviewPage() {
         experienceLevel: skillLevel as any,
         specialRequests: notes,
       });
-      setMockOrderId(res.paypalTransactionId || `PAYID-${Math.random().toString(36).substring(2, 9).toUpperCase()}`);
-      setSeatsTaken((prev) => prev + 1);
+
+      if (res.paymentStatus === "failed") {
+        throw new Error("Payment authorization was declined. Please try again.");
+      }
+
+      setMockOrderId(res.paypalTransactionId || res.id || `SIM-${Date.now().toString(36).toUpperCase()}`);
+      // Never increment beyond capacity
+      setSeatsTaken((prev) => Math.min(seatsTotal, prev + 1));
       setCheckoutStep("success");
     } catch (err) {
       console.error("Failed to submit registration", err);
-      // Fallback
-      setMockOrderId(`PAYID-${Math.random().toString(36).substring(2, 9).toUpperCase()}`);
-      setSeatsTaken((prev) => prev + 1);
-      setCheckoutStep("success");
+      // Keep user out of success screen, show clear error and allow retry
+      const message =
+        err instanceof Error
+          ? err.message
+          : "Registration simulation failed. Please try again.";
+      setPaymentError(message);
     } finally {
       setIsSubmitting(false);
     }
@@ -97,6 +134,8 @@ export default function RegistrationPreviewPage() {
     setFullName("");
     setEmail("");
     setNotes("");
+    setPaymentError(null);
+    setMockOrderId("");
     setCheckoutStep("form");
   };
 
@@ -183,7 +222,11 @@ export default function RegistrationPreviewPage() {
               <Badge variant="indigo">Official Registration Portal</Badge>
               <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-slate-900/80 border border-slate-700 text-xs font-mono">
                 <Users className="w-3.5 h-3.5 text-indigo-400" />
-                <span className="text-emerald-400 font-bold">{seatsRemaining} seats left</span>
+                {isFull ? (
+                  <span className="text-amber-400 font-bold">Registration Full</span>
+                ) : (
+                  <span className="text-emerald-400 font-bold">{seatsRemaining} seats left</span>
+                )}
                 <span className="text-slate-500">({seatsTaken}/{seatsTotal} filled)</span>
               </div>
             </div>
@@ -253,7 +296,7 @@ export default function RegistrationPreviewPage() {
                       className="w-full bg-slate-950 border border-slate-700 rounded-xl px-4 py-3 text-sm text-white placeholder-slate-500 focus:outline-none focus:border-indigo-500"
                     />
                     <p className="text-[11px] text-slate-500 mt-1">
-                      Your admission ticket and access credentials will be dispatched to this address.
+                      Your admission ticket and access credentials will be simulated for this address.
                     </p>
                   </div>
 
@@ -290,7 +333,7 @@ export default function RegistrationPreviewPage() {
                 <div className="p-4 rounded-2xl bg-slate-950 border border-slate-800 space-y-2">
                   <div className="flex items-center justify-between text-xs text-slate-400">
                     <span>Admission Fee</span>
-                    <span>${feeAmount}.00 {currency}</span>
+                    <span>{formatCurrency(feeAmount, currency)}</span>
                   </div>
                   <div className="flex items-center justify-between text-xs text-slate-400">
                     <span>Confirmation Ticket & Verification</span>
@@ -299,19 +342,38 @@ export default function RegistrationPreviewPage() {
                   <div className="pt-2 border-t border-slate-800 flex items-center justify-between text-sm font-bold text-white">
                     <span>Total Due Now</span>
                     <span className="text-emerald-400 font-mono text-base">
-                      ${feeAmount}.00 {currency}
+                      {formatCurrency(feeAmount, currency)}
                     </span>
                   </div>
                 </div>
+
+                {/* Registration Full Notice */}
+                {isFull && (
+                  <div className="p-3.5 rounded-xl bg-amber-500/10 border border-amber-500/30 text-amber-300 text-xs flex items-center gap-2.5">
+                    <AlertCircle className="w-4 h-4 shrink-0 text-amber-400" />
+                    <span>
+                      <strong>Registration Full:</strong> All {seatsTotal} seats for this session are currently claimed.
+                    </span>
+                  </div>
+                )}
 
                 {/* PayPal Checkout Button Placeholder */}
                 <div className="pt-2">
                   <button
                     type="submit"
-                    className="w-full py-3.5 px-4 rounded-xl bg-[#0070ba] hover:bg-[#005ea6] text-white font-bold text-sm flex items-center justify-center gap-2 shadow-lg shadow-blue-900/20 transition-all"
+                    disabled={isFull}
+                    className={`w-full py-3.5 px-4 rounded-xl font-bold text-sm flex items-center justify-center gap-2 shadow-lg transition-all ${
+                      isFull
+                        ? "bg-slate-800 text-slate-500 cursor-not-allowed border border-slate-700 shadow-none"
+                        : "bg-[#0070ba] hover:bg-[#005ea6] text-white shadow-blue-900/20"
+                    }`}
                   >
                     <CreditCard className="w-4 h-4" />
-                    <span>Pay with PayPal (${feeAmount}.00 {currency})</span>
+                    <span>
+                      {isFull
+                        ? "Registration Full"
+                        : `Pay with PayPal (${formatCurrency(feeAmount, currency)})`}
+                    </span>
                   </button>
                   <p className="text-[11px] text-center text-slate-500 mt-2 flex items-center justify-center gap-1">
                     <ShieldCheck className="w-3.5 h-3.5 text-emerald-400" />
@@ -328,6 +390,9 @@ export default function RegistrationPreviewPage() {
                   <CreditCard className="w-6 h-6" />
                 </div>
                 <div>
+                  <div className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full bg-blue-950/80 border border-blue-800 text-[11px] font-mono text-blue-300 mb-2">
+                    <Info className="w-3 h-3 text-blue-400" /> Demo Payment Simulation
+                  </div>
                   <h3 className="text-base font-bold text-white">
                     Simulate PayPal Order Authorization
                   </h3>
@@ -335,15 +400,32 @@ export default function RegistrationPreviewPage() {
                     Attendee: <strong className="text-slate-200">{fullName}</strong> ({email})
                   </p>
                   <div className="mt-3 text-2xl font-mono font-bold text-emerald-400">
-                    ${feeAmount}.00 {currency}
+                    {formatCurrency(feeAmount, currency)}
                   </div>
+                  <p className="text-[11px] text-slate-500 mt-1">
+                    Demo Mode: This simulates an authorized transaction without charging a real account.
+                  </p>
                 </div>
+
+                {/* Error message if payment simulation failed */}
+                {paymentError && (
+                  <div className="p-3.5 rounded-xl bg-rose-500/10 border border-rose-500/30 text-rose-300 text-xs text-left flex items-start gap-2.5">
+                    <AlertCircle className="w-4 h-4 shrink-0 text-rose-400 mt-0.5" />
+                    <div className="flex-1">
+                      <div className="font-semibold text-rose-200">Simulation Failed</div>
+                      <div className="text-rose-300 mt-0.5">{paymentError}</div>
+                    </div>
+                  </div>
+                )}
 
                 <div className="flex items-center justify-center gap-3">
                   <Button
                     variant="ghost"
                     size="sm"
-                    onClick={() => setCheckoutStep("form")}
+                    onClick={() => {
+                      setPaymentError(null);
+                      setCheckoutStep("form");
+                    }}
                   >
                     Back to Form
                   </Button>
@@ -353,7 +435,7 @@ export default function RegistrationPreviewPage() {
                     isLoading={isSubmitting}
                     onClick={handleSimulatePayment}
                   >
-                    Approve & Verify Payment
+                    {paymentError ? "Retry Simulation" : "Approve & Verify Payment"}
                   </Button>
                 </div>
               </div>
@@ -366,33 +448,50 @@ export default function RegistrationPreviewPage() {
                   <Check className="w-7 h-7" />
                 </div>
                 <div>
+                  <div className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full bg-emerald-950/80 border border-emerald-800 text-[11px] font-mono text-emerald-300 mb-2">
+                    <Sparkles className="w-3 h-3 text-emerald-400" /> Demo Simulation Completed
+                  </div>
                   <h3 className="text-xl font-bold text-white">
-                    Registration & Payment Confirmed!
+                    Registration & Payment Confirmed
                   </h3>
                   <p className="text-xs text-slate-300 mt-1.5 max-w-md mx-auto">
-                    Welcome aboard, <strong>{fullName}</strong>. Your seat has been reserved and your ticket + calendar invite was dispatched to <strong>{email}</strong>.
+                    Welcome aboard, <strong>{fullName}</strong>. Your seat has been reserved in this demo simulation (simulated confirmation for <strong>{email}</strong>).
                   </p>
                 </div>
 
                 {/* Receipt Card */}
-                <div className="max-w-sm mx-auto p-4 rounded-xl bg-slate-900 border border-slate-800 text-left text-xs font-mono space-y-2">
+                <div className="max-w-sm mx-auto p-4 rounded-xl bg-slate-900 border border-slate-800 text-left text-xs font-mono space-y-2.5">
+                  <div className="flex items-center justify-between pb-2 border-b border-slate-800">
+                    <span className="text-[11px] font-semibold text-slate-300 uppercase tracking-wider">
+                      Demo Transaction Receipt
+                    </span>
+                    <span className="text-[10px] px-2 py-0.5 rounded bg-indigo-950/80 text-indigo-300 border border-indigo-800/50">
+                      Simulated
+                    </span>
+                  </div>
                   <div className="flex justify-between text-slate-400">
                     <span>Transaction ID</span>
                     <span className="text-slate-200">{mockOrderId}</span>
                   </div>
                   <div className="flex justify-between text-slate-400">
-                    <span>Amount Captured</span>
-                    <span className="text-emerald-400 font-bold">${feeAmount}.00 {currency}</span>
+                    <span>Amount Simulated</span>
+                    <span className="text-emerald-400 font-bold">
+                      {formatCurrency(feeAmount, currency)}
+                    </span>
                   </div>
                   <div className="flex justify-between text-slate-400">
                     <span>Status</span>
-                    <span className="text-teal-400">Verified by Webhook</span>
+                    <span className="text-teal-400">Simulated / Demo Verified</span>
                   </div>
                   <div className="flex justify-between text-slate-400">
                     <span>Remaining Seats</span>
                     <span className="text-indigo-300">{seatsRemaining} seats</span>
                   </div>
                 </div>
+
+                <p className="text-[11px] text-slate-500 max-w-sm mx-auto">
+                  Note: This was a simulated demonstration payment. No live PayPal charge was made, and no real webhooks or confirmation emails were dispatched.
+                </p>
 
                 <div className="flex items-center justify-center gap-3 pt-2">
                   <Button

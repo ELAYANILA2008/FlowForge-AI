@@ -190,15 +190,49 @@ export const MockMetricsService: IMetricsService = {
     const workflows = getWorkflows();
     const totalWfs = workflows.length;
     const activeWfs = workflows.filter((w) => w.status === "active").length;
+    const successfulExecs = workflows.reduce(
+      (acc, w) => acc + (w.stats?.successfulRuns || 0), 0
+    );
+
+    const failedExecs = workflows.reduce(
+      (acc, w) => acc + (w.stats?.failedRuns || 0), 0
+    );
     const totalRegs = workflows.reduce((acc, w) => acc + (w.stats?.totalRegistrations || 0), 0);
-    const totalRev = workflows.reduce((acc, w) => acc + (w.stats?.totalRevenue || 0), 0);
+    const totalRev = workflows.reduce(
+      (acc, w) =>
+        acc +
+        (w.steps.find((s) => s.type === "payment")?.config.currency === "USD"
+          ? (w.stats?.totalRevenue || 0)
+          : 0),
+      0
+    );
 
     return {
       ...SAMPLE_DASHBOARD_METRICS,
       totalWorkflows: totalWfs,
       activeWorkflows: activeWfs,
-      totalRegistrations: Math.max(totalRegs, SAMPLE_DASHBOARD_METRICS.totalRegistrations),
-      totalRevenueUsd: Math.max(totalRev, SAMPLE_DASHBOARD_METRICS.totalRevenueUsd),
+      successfulExecutions: successfulExecs,
+      failedExecutions: failedExecs,
+      totalRegistrations: totalRegs,
+      totalRevenueUsd: totalRev,
+
+      totalRevenueInr: workflows.reduce(
+        (acc, w) =>
+          acc +
+          (w.steps.find((s) => s.type === "payment")?.config.currency === "INR"
+            ? (w.stats?.totalRevenue || 0)
+            : 0),
+        0
+      ),
+
+      totalRevenueEur: workflows.reduce(
+        (acc, w) =>
+          acc +
+          (w.steps.find((s) => s.type === "payment")?.config.currency === "EUR"
+            ? (w.stats?.totalRevenue || 0)
+            : 0),
+        0
+      ),
     };
   },
 

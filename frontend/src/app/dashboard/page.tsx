@@ -147,12 +147,30 @@ export default function DashboardOverviewPage() {
             color="indigo"
           />
           <MetricCard
-            label="PayPal Revenue"
+            label="PayPal Revenue (USD)"
             value={`$${metrics.totalRevenueUsd.toLocaleString()}`}
-            subtitle="Captured & verified"
+            subtitle="US Dollar"
             change="+18.4% vol"
             icon={<CreditCard className="w-4 h-4" />}
             color="emerald"
+          />
+
+          <MetricCard
+            label="PayPal Revenue (INR)"
+            value={`₹${metrics.totalRevenueInr.toLocaleString("en-IN")}`}
+            subtitle="Indian Rupee"
+            change="INR"
+            icon={<CreditCard className="w-4 h-4" />}
+            color="indigo"
+          />
+
+          <MetricCard
+            label="PayPal Revenue (EUR)"
+            value={`€${metrics.totalRevenueEur.toLocaleString("de-DE")}`}
+            subtitle="Euro"
+            change="EUR"
+            icon={<CreditCard className="w-4 h-4" />}
+            color="cyan"
           />
         </div>
 
