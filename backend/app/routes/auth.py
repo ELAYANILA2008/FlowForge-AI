@@ -19,7 +19,7 @@ logger = logging.getLogger("flowforge.routes.auth")
 router = APIRouter(prefix="/auth", tags=["Authentication"])
 
 oauth2_scheme = OAuth2PasswordBearer(
-    tokenUrl=f"{settings.API_V1_PREFIX}/auth/login",
+    tokenUrl=f"{settings.API_V1_PREFIX}/auth/token",
     auto_error=False,
 )
 
@@ -121,6 +121,34 @@ def login(
     )
 
     logger.info("User [%s] '%s' logged in successfully", user.id, user.email)
+    return TokenResponse(
+        access_token=token,
+        token_type="bearer",
+        user=UserResponse.model_validate(user),
+    )
+
+
+@router.post(
+    "/token",
+    response_model=TokenResponse,
+    summary="OAuth2 Access Token",
+    description="OAuth2-compliant password flow endpoint for Swagger UI and form-based clients.",
+)
+def issue_token(
+    form_data: OAuth2PasswordRequestForm = Depends(),
+    db: Session = Depends(get_db),
+):
+    """Authenticate using OAuth2 form data (username=email, password)."""
+    user = db.scalar(select(User).where(User.email == form_data.username.lower().strip()))
+    if not user or not verify_password(form_data.password, user.hashed_password):
+        raise AuthenticationException("Invalid email or password.")
+
+    token = create_access_token(
+        subject=user.id,
+        claims={"email": user.email, "role": user.role, "name": user.name},
+    )
+
+    logger.info("User [%s] '%s' authenticated via OAuth2 form", user.id, user.email)
     return TokenResponse(
         access_token=token,
         token_type="bearer",

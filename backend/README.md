@@ -47,7 +47,7 @@ backend/
 │   │   ├── payment.py            # Payment & PayPal Orders v2 schemas
 │   │   └── analytics.py          # Dashboard telemetry & agent benchmarks
 │   ├── routes/                   # FastAPI route endpoints (/api/v1)
-│   │   ├── auth.py               # /auth/register, /auth/login, /auth/me
+│   │   ├── auth.py               # /auth/register, /auth/login, /auth/token, /auth/me
 │   │   ├── workflows.py          # /workflows, /workflows/generate, /workflows/{id}
 │   │   ├── registrations.py      # /registration/{id}, /registration/status/{id}
 │   │   ├── payments.py           # /payments, /payments/create-order, /payments/capture
@@ -62,7 +62,7 @@ backend/
 │   │   └── analytics_service.py  # Multi-currency revenue & agent telemetry
 │   └── utils/
 │       └── currency.py           # Decimal monetary math (USD, EUR, INR)
-├── tests/                        # Automated test suites (53 tests)
+├── tests/                        # Automated test suites (66 tests)
 ├── .env.example                  # Environment configuration template
 └── requirements.txt              # Production and dev dependencies
 ```
@@ -162,8 +162,9 @@ All endpoints return a standardized JSON envelope matching the frontend's `ApiRe
 
 ### 2. Authentication (`/api/v1/auth`)
 * `POST /api/v1/auth/register`: Register owner account (hashes password via PBKDF2, issues JWT).
-* `POST /api/v1/auth/login`: Authenticate with email/password and obtain JWT.
-* `GET /api/v1/auth/me`: Retrieve current authenticated user profile.
+* `POST /api/v1/auth/login`: Authenticate with JSON payload (`email`, `password`) and obtain JWT.
+* `POST /api/v1/auth/token`: OAuth2 password flow endpoint (`application/x-www-form-urlencoded` with `username` and `password`) powering Swagger UI Authorize modal.
+* `GET /api/v1/auth/me`: Retrieve current authenticated user profile via Bearer token.
 
 ### 3. Workflows (`/api/v1/workflows`)
 * `GET /api/v1/workflows`: List all workflows (supports `?status=active` filter).
@@ -211,7 +212,7 @@ FlowForge AI enforces strict financial integrity:
 
 ## 🧪 Testing
 
-Execute the comprehensive automated test suite (53 tests):
+Execute the comprehensive automated test suite (66 tests):
 ```powershell
 python -m pytest backend/tests -v
 ```
@@ -219,6 +220,7 @@ python -m pytest backend/tests -v
 ### Test Suite Structure
 * `tests/test_health.py` (5 tests): App startup, health endpoints, CORS, currency utilities.
 * `tests/test_database.py` (5 tests): User creation, unique constraints, workflow cascade, capacity enforcement, audit trail.
+* `tests/test_auth.py` (13 tests): OAuth2 password flow, /token form-urlencoded generation, FastAPI TestClient integration, invalid credentials rejection, /me profile lookup, token scheme configuration.
 * `tests/test_workflows.py` (12 tests): User registration, JWT login, profile lookup, workflow CRUD, status transitions.
 * `tests/test_ai_integration.py` (6 tests): Natural language prompt synthesis, multi-currency price parsing, safety guards.
 * `tests/test_payments.py` (11 tests): Decimal validation, currency normalization, negative amount rejection, status updates.
